@@ -11,7 +11,7 @@ they already have.
 
 - `/codex:review` for a normal read-only Codex review
 - `/codex:adversarial-review` for a steerable challenge review
-- `/codex:rescue`, `/codex:status`, `/codex:result`, and `/codex:cancel` to delegate work and manage background jobs
+- `/codex:rescue`, `/codex:execute`, `/codex:status`, `/codex:result`, and `/codex:cancel` to delegate work and manage background jobs
 
 ## Requirements
 
@@ -161,6 +161,23 @@ Ask Codex to redesign the database connection to be more resilient.
 - if you do not pass `--model` or `--effort`, Codex chooses its own defaults.
 - if you say `spark`, the plugin maps that to `gpt-5.3-codex-spark`
 - follow-up rescue requests can continue the latest Codex task in the repo
+
+### `/codex:execute`
+
+Launches a fresh Codex implementation run through the `codex:codex-execute` subagent.
+
+Use it when you want Codex to kick off a new piece of work end-to-end, without the rescue framing. It is a thin twin of `/codex:rescue`: same flags, same resume handling, same background/foreground behavior, just positioned around "start an implementation run" rather than "rescue a stuck Claude thread".
+
+It supports `--background`, `--wait`, `--resume`, `--fresh`, `--model`, and `--effort`. If you omit `--resume` and `--fresh`, the plugin can offer to continue the latest Codex thread for this repo.
+
+Examples:
+
+```bash
+/codex:execute implement the new pagination endpoint per the spec
+/codex:execute --background wire up the feature flag end-to-end
+/codex:execute --fresh start a clean refactor of the auth middleware
+/codex:execute --model gpt-5.4-mini --effort medium add the missing tests
+```
 
 ### `/codex:status`
 

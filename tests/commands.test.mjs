@@ -101,7 +101,8 @@ test("rescue command absorbs continue semantics", () => {
   assert.match(rescue, /Continue current Codex thread/);
   assert.match(rescue, /Start a new Codex thread/);
   assert.match(rescue, /run the `codex:codex-rescue` subagent in the background/i);
-  assert.match(rescue, /default to foreground/i);
+  assert.match(rescue, /If neither flag is present, default to background\./i);
+  assert.match(rescue, /Initializing/);
   assert.match(rescue, /Do not forward them to `task`/i);
   assert.match(rescue, /`--model` and `--effort` are runtime-selection flags/i);
   assert.match(rescue, /Leave `--effort` unset unless the user explicitly asks for a specific reasoning effort/i);
@@ -177,7 +178,8 @@ test("execute command launches a fresh Codex implementation run", () => {
   assert.match(execute, /Continue current Codex thread/);
   assert.match(execute, /Start a new Codex thread/);
   assert.match(execute, /run the `codex:codex-execute` subagent in the background/i);
-  assert.match(execute, /default to foreground/i);
+  assert.match(execute, /If neither flag is present, default to background\./i);
+  assert.match(execute, /Initializing/);
   assert.match(execute, /Do not forward them to `task`/i);
   assert.match(execute, /`--model` and `--effort` are runtime-selection flags/i);
   assert.match(execute, /Leave `--effort` unset unless the user explicitly asks for a specific reasoning effort/i);

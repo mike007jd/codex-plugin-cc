@@ -13,7 +13,7 @@ import process from "node:process";
 import { spawn } from "node:child_process";
 import readline from "node:readline";
 import { parseBrokerEndpoint } from "./broker-endpoint.mjs";
-import { ensureBrokerSession, loadBrokerSession } from "./broker-lifecycle.mjs";
+import { clearBrokerSession, ensureBrokerSession, loadBrokerSession, teardownBrokerSession } from "./broker-lifecycle.mjs";
 import { terminateProcessTree } from "./process.mjs";
 
 const PLUGIN_MANIFEST_URL = new URL("../../.claude-plugin/plugin.json", import.meta.url);
@@ -51,6 +51,10 @@ function createProtocolError(message, data) {
     error.rpcCode = data.code;
   }
   return error;
+}
+
+function isRetriableBrokerConnectionError(error) {
+  return error?.code === "ENOENT" || error?.code === "ECONNREFUSED";
 }
 
 class AppServerClientBase {
@@ -331,20 +335,47 @@ class BrokerCodexAppServerClient extends AppServerClientBase {
 export class CodexAppServerClient {
   static async connect(cwd, options = {}) {
     let brokerEndpoint = null;
+    let reusableBrokerSession = null;
     if (!options.disableBroker) {
       brokerEndpoint = options.brokerEndpoint ?? options.env?.[BROKER_ENDPOINT_ENV] ?? process.env[BROKER_ENDPOINT_ENV] ?? null;
       if (!brokerEndpoint && options.reuseExistingBroker) {
-        brokerEndpoint = loadBrokerSession(cwd)?.endpoint ?? null;
+        reusableBrokerSession = loadBrokerSession(cwd);
+        brokerEndpoint = reusableBrokerSession?.endpoint ?? null;
       }
       if (!brokerEndpoint && !options.reuseExistingBroker) {
         const brokerSession = await ensureBrokerSession(cwd, { env: options.env });
         brokerEndpoint = brokerSession?.endpoint ?? null;
       }
     }
-    const client = brokerEndpoint
+
+    let client = brokerEndpoint
       ? new BrokerCodexAppServerClient(cwd, { ...options, brokerEndpoint })
       : new SpawnedCodexAppServerClient(cwd, options);
-    await client.initialize();
-    return client;
+    try {
+      await client.initialize();
+      return client;
+    } catch (error) {
+      await client.close().catch(() => {});
+
+      if (!brokerEndpoint || !options.reuseExistingBroker || !isRetriableBrokerConnectionError(error)) {
+        throw error;
+      }
+
+      if (reusableBrokerSession?.endpoint === brokerEndpoint) {
+        teardownBrokerSession({
+          endpoint: reusableBrokerSession.endpoint ?? null,
+          pidFile: reusableBrokerSession.pidFile ?? null,
+          logFile: reusableBrokerSession.logFile ?? null,
+          sessionDir: reusableBrokerSession.sessionDir ?? null,
+          pid: reusableBrokerSession.pid ?? null,
+          killProcess: terminateProcessTree
+        });
+        clearBrokerSession(cwd);
+      }
+
+      client = new SpawnedCodexAppServerClient(cwd, options);
+      await client.initialize();
+      return client;
+    }
   }
 }

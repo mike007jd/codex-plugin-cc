@@ -2070,6 +2070,40 @@ test("setup reuses an existing shared app-server without starting another one", 
   assert.equal(cleanup.status, 0, cleanup.stderr);
 });
 
+test("setup ignores a stale shared app-server session and falls back to direct startup", () => {
+  const repo = makeTempDir();
+  const binDir = makeTempDir();
+  const fakeStatePath = path.join(binDir, "fake-codex-state.json");
+
+  installFakeCodex(binDir);
+  initGitRepo(repo);
+  fs.writeFileSync(path.join(repo, "README.md"), "hello\n");
+  run("git", ["add", "README.md"], { cwd: repo });
+  run("git", ["commit", "-m", "init"], { cwd: repo });
+
+  const staleEndpoint =
+    process.platform === "win32"
+      ? `pipe:\\\\.\\pipe\\cxc-stale-${Date.now()}`
+      : `unix:${path.join(repo, "missing-broker.sock")}`;
+  saveBrokerSession(repo, {
+    endpoint: staleEndpoint
+  });
+
+  const setup = run("node", [SCRIPT, "setup", "--json"], {
+    cwd: repo,
+    env: buildEnv(binDir)
+  });
+  assert.equal(setup.status, 0, setup.stderr);
+
+  const payload = JSON.parse(setup.stdout);
+  assert.equal(payload.ready, true);
+  assert.equal(payload.sessionRuntime.mode, "direct");
+  assert.equal(loadBrokerSession(repo), null);
+
+  const fakeState = JSON.parse(fs.readFileSync(fakeStatePath, "utf8"));
+  assert.equal(fakeState.appServerStarts, 1);
+});
+
 test("status reports shared session runtime when a lazy broker is active", () => {
   const repo = makeTempDir();
   const binDir = makeTempDir();
@@ -2099,7 +2133,7 @@ test("status reports shared session runtime when a lazy broker is active", () =>
   assert.match(result.stdout, /Session runtime: shared session/);
 });
 
-test("setup and status honor --cwd when reading shared session runtime", () => {
+test("setup and status honor --cwd while clearing stale shared session runtime", () => {
   const targetWorkspace = makeTempDir();
   const invocationWorkspace = makeTempDir();
 
@@ -2111,13 +2145,14 @@ test("setup and status honor --cwd when reading shared session runtime", () => {
     cwd: invocationWorkspace
   });
   assert.equal(status.status, 0, status.stderr);
-  assert.match(status.stdout, /Session runtime: shared session/);
+  assert.match(status.stdout, /Session runtime: direct startup/);
+  assert.equal(loadBrokerSession(targetWorkspace), null);
 
   const setup = run("node", [SCRIPT, "setup", "--cwd", targetWorkspace, "--json"], {
     cwd: invocationWorkspace
   });
   assert.equal(setup.status, 0, setup.stderr);
   const payload = JSON.parse(setup.stdout);
-  assert.equal(payload.sessionRuntime.mode, "shared");
-  assert.equal(payload.sessionRuntime.endpoint, "unix:/tmp/fake-broker.sock");
+  assert.equal(payload.sessionRuntime.mode, "direct");
+  assert.equal(payload.sessionRuntime.endpoint, null);
 });

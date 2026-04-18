@@ -34,9 +34,11 @@
  *   onProgress: ProgressReporter | null
  * }} TurnCaptureState
  */
+import fs from "node:fs";
 import { readJsonFile } from "./fs.mjs";
 import { BROKER_BUSY_RPC_CODE, BROKER_ENDPOINT_ENV, CodexAppServerClient } from "./app-server.mjs";
-import { loadBrokerSession } from "./broker-lifecycle.mjs";
+import { clearBrokerSession, loadBrokerSession, teardownBrokerSession } from "./broker-lifecycle.mjs";
+import { parseBrokerEndpoint } from "./broker-endpoint.mjs";
 import { binaryAvailable } from "./process.mjs";
 
 const SERVICE_NAME = "claude_code_codex_plugin";
@@ -810,14 +812,41 @@ export function getCodexAvailability(cwd) {
 }
 
 export function getSessionRuntimeStatus(env = process.env, cwd = process.cwd()) {
-  const endpoint = env?.[BROKER_ENDPOINT_ENV] ?? loadBrokerSession(cwd)?.endpoint ?? null;
-  if (endpoint) {
+  const envEndpoint = env?.[BROKER_ENDPOINT_ENV] ?? null;
+  if (envEndpoint) {
     return {
       mode: "shared",
       label: "shared session",
       detail: "This Claude session is configured to reuse one shared Codex runtime.",
-      endpoint
+      endpoint: envEndpoint
     };
+  }
+
+  const brokerSession = loadBrokerSession(cwd);
+  const endpoint = brokerSession?.endpoint ?? null;
+  if (endpoint) {
+    try {
+      const target = parseBrokerEndpoint(endpoint);
+      if (target.kind !== "unix" || fs.existsSync(target.path)) {
+        return {
+          mode: "shared",
+          label: "shared session",
+          detail: "This Claude session is configured to reuse one shared Codex runtime.",
+          endpoint
+        };
+      }
+    } catch {
+      // Fall through and clear invalid saved broker metadata.
+    }
+
+    teardownBrokerSession({
+      endpoint: brokerSession?.endpoint ?? null,
+      pidFile: brokerSession?.pidFile ?? null,
+      logFile: brokerSession?.logFile ?? null,
+      sessionDir: brokerSession?.sessionDir ?? null,
+      pid: brokerSession?.pid ?? null
+    });
+    clearBrokerSession(cwd);
   }
 
   return {

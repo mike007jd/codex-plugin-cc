@@ -164,11 +164,11 @@ Ask Codex to redesign the database connection to be more resilient.
 
 ### `/codex:execute`
 
-Launches a fresh Codex implementation run through the `codex:codex-execute` subagent.
+Launches a fresh Codex implementation run through the shared Codex companion runtime.
 
-Use it when you want Codex to kick off a new piece of work end-to-end, without the rescue framing. It is a thin twin of `/codex:rescue`: same flags, same resume handling, same background/foreground behavior, just positioned around "start an implementation run" rather than "rescue a stuck Claude thread".
+Use it when you want Codex to kick off a new piece of work end-to-end, without the rescue framing.
 
-It supports `--background`, `--wait`, `--resume`, `--fresh`, `--model`, and `--effort`. If you omit both `--background` and `--wait`, the subagent runs in the background by default so the Claude Code UI does not sit on "Initializing…" for the whole Codex turn. Pass `--wait` if you want the main thread to block on inline output. If you omit `--resume` and `--fresh`, the plugin can offer to continue the latest Codex thread for this repo.
+It supports `--background`, `--wait`, `--resume`, `--fresh`, `--model`, and `--effort`. If you omit both `--background` and `--wait`, it defaults to `--background`, queues the Codex job immediately, and returns the queued job id so you can track it with `/codex:status`. If you omit `--resume` and `--fresh`, the plugin can offer to continue the latest Codex thread for this repo.
 
 Examples:
 
